@@ -1,0 +1,6 @@
+prefect
+telethon
+feedparser
+httpx
+beautifulsoup4
+python-dotenv
