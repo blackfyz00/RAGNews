@@ -1,11 +1,9 @@
 import os
 from typing import List, Dict, Any
-
 from dotenv import load_dotenv
 from gigachat import GigaChat
 
 load_dotenv()
-
 
 class GigaChatEmbeddingProvider:
     """
@@ -21,9 +19,6 @@ class GigaChatEmbeddingProvider:
             verify_ssl_certs=False,
         )
 
-    # -------------------------
-    # TEXT PREPARATION
-    # -------------------------
     def prepare_embedding_text(self, news: Dict[str, Any], max_chars: int = 1800) -> str:
         """
         Берёт готовый embedding_text из silver-layer.
@@ -46,9 +41,6 @@ class GigaChatEmbeddingProvider:
 
         return text
 
-    # -------------------------
-    # EMBEDDING CALL
-    # -------------------------
     def get_embedding(self, text: str) -> List[float]:
         """
         Получает embedding одного текста через GigaChat.
@@ -60,9 +52,6 @@ class GigaChatEmbeddingProvider:
 
         return response.data[0].embedding
 
-    # -------------------------
-    # BATCH PROCESSING
-    # -------------------------
     def add_embeddings(self, news_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Добавляет embeddings к списку новостей.
@@ -77,6 +66,6 @@ class GigaChatEmbeddingProvider:
             embedding = self.get_embedding(text)
 
             news["embedding"] = embedding
-            news["embedding_text_used"] = text  # полезно для дебага
+            news["embedding_text_used"] = text  # для дебага
 
         return news_list

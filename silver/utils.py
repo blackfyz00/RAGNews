@@ -5,13 +5,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 logger = logging.getLogger("news_pipeline")
 
-
-# ----------------------------
-# JSON IO
-# ----------------------------
 def load_json(file_path: str | Path) -> List[Dict[str, Any]]:
     file_path = Path(file_path)
 
@@ -28,7 +23,6 @@ def load_json(file_path: str | Path) -> List[Dict[str, Any]]:
     logger.info("Загружено %d новостей", len(data))
     return data
 
-
 def save_json(data: List[Dict[str, Any]], file_path: str | Path) -> None:
     file_path = Path(file_path)
     tmp_path = file_path.with_suffix(".tmp")
@@ -40,9 +34,5 @@ def save_json(data: List[Dict[str, Any]], file_path: str | Path) -> None:
 
     logger.info("Сохранено %d новостей в %s", len(data), file_path)
 
-
-# ----------------------------
-# ID
-# ----------------------------
 def generate_news_id() -> str:
     return str(uuid.uuid4())

@@ -3,9 +3,8 @@ import unicodedata
 from bs4 import BeautifulSoup
 from typing import Dict, List
 
-
 class TextNormalizer:
-    """Нормализация текста для эмбеддингов (RAG-ready)."""
+    """Нормализация текста для эмбеддингов"""
 
     def __init__(self):
         self.url_re = re.compile(r"https?://\S+", re.IGNORECASE)
@@ -22,17 +21,13 @@ class TextNormalizer:
             re.IGNORECASE | re.MULTILINE
         )
 
-    # -------------------------
     # HTML
-    # -------------------------
     def clean_html(self, text: str) -> str:
         if not text:
             return ""
         return BeautifulSoup(text, "html.parser").get_text(" ")
 
-    # -------------------------
     # line dedup
-    # -------------------------
     def remove_duplicate_lines(self, text: str) -> str:
         if not text:
             return ""
@@ -51,9 +46,7 @@ class TextNormalizer:
 
         return " ".join(result)
 
-    # -------------------------
     # core normalize
-    # -------------------------
     def normalize(self, text: str) -> str:
         if not text:
             return ""
@@ -71,22 +64,13 @@ class TextNormalizer:
 
         return text.strip()
 
-
-# -------------------------
-# global instance (ВАЖНО)
-# -------------------------
 normalizer = TextNormalizer()
 
-
-# -------------------------
-# helpers
-# -------------------------
 def extract_title(text: str) -> str:
     if not text:
         return ""
     title = text.split("\n")[0].strip()
     return title if len(title) < 200 else ""
-
 
 def remove_title_from_content(title: str, content: str) -> str:
     if not title or not content:
@@ -99,10 +83,6 @@ def remove_title_from_content(title: str, content: str) -> str:
 
     return content
 
-
-# -------------------------
-# MAIN
-# -------------------------
 def normalize_news(news: dict) -> dict:
     result = news.copy()
 
@@ -112,7 +92,7 @@ def normalize_news(news: dict) -> dict:
     content = normalizer.normalize(content)
     content = remove_title_from_content(title, content)
 
-    # final embedding text (ВАЖНО для RAG)
+    # final embedding text (важно для RAG)
     if title and content:
         embedding_text = f"TITLE: {title}\nCONTENT: {content}"
     else:
