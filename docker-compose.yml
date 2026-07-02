@@ -1,0 +1,31 @@
+name: ragnews
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: it_news_rag_db
+    restart: always
+    environment:
+      POSTGRES_DB: it_news_rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # pipeline:
+  #   build:
+  #     context: ./pipeline
+  #   container_name: it_news_rag_pipeline
+  #   depends_on:
+  #     - db
+  #   env_file:
+  #     - ./pipeline/.env
+  #   volumes:
+  #     - ./pipeline/sites.txt:/app/sites.txt
+  #     - ./pipeline/tgch.txt:/app/tgch.txt
+
+volumes:
+  postgres_data:
