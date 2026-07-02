@@ -12,6 +12,12 @@ load_dotenv('telegram_creds.env')
 TELEGRAM_API_ID = os.getenv('TELEGRAM_API_ID')
 TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(__file__)
+
+SITES_FILE = os.path.join(BASE_DIR, "sites.txt")
+TG_FILE = os.path.join(BASE_DIR, "tgch.txt")
+
 # ---- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧТЕНИЯ ФАЙЛОВ ----
 
 def read_lines_from_file(file_path: str) -> list[str]:
@@ -241,15 +247,18 @@ def save_to_bronze_layer_txt(data: list[dict], output_file: str = "test.txt") ->
     if not data:
         print("❌ Нет данных для сохранения в Бронзовый слой.")
         return []
-        
+
+    output_path = os.path.join(BASE_DIR, output_file)
+
     try:
-        # Записываем массив словарей в файл с отступами для читаемости
-        with open(output_file, "w", encoding="utf-8") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        print(f"💾 Успешно записано {len(data)} объектов в файл {output_file}")
+
+        print(f"💾 Успешно записано {len(data)} объектов в файл {output_path}")
+
     except Exception as e:
-        print(f"❌ Ошибка при записи в файл {output_file}: {e}")
-    
+        print(f"❌ Ошибка при записи в файл {output_path}: {e}")
+
     return data
 
 
@@ -261,8 +270,8 @@ async def main_bronze_pipeline():
     print("="*50)
     
     # 1. Парсинг новостей с сайтов из файла sites.txt
-    site_news = fetch_news_from_sites(file_path="sites.txt")
-    tg_news = fetch_news_from_telegram(file_path="tgch.txt")
+    site_news = fetch_news_from_sites(file_path=SITES_FILE)
+    tg_news = fetch_news_from_telegram(file_path=TG_FILE)
     
     # Объединяем массивы payload в один общий бронзовый пул
     raw_bronze_pool = site_news + tg_news
