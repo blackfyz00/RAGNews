@@ -4,8 +4,6 @@ from bs4 import BeautifulSoup
 from typing import Dict, List
 
 class TextNormalizer:
-    """Нормализация текста для эмбеддингов"""
-
     def __init__(self):
         self.url_re = re.compile(r"https?://\S+", re.IGNORECASE)
         self.tg_link_re = re.compile(r"https?://t\.me/\S+", re.IGNORECASE)
@@ -98,9 +96,8 @@ def normalize_news(news: dict) -> dict:
     else:
         embedding_text = title or content
 
+    result["title"] = title
     result["normalized_text"] = content
-    result["embedding_text"] = embedding_text
-    result["normalized_title"] = title
 
     return result
 

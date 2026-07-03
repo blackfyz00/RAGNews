@@ -5,13 +5,8 @@ from gigachat import GigaChat
 
 load_dotenv()
 
+# Генерация эмбеддингов, использует embedding_text
 class GigaChatEmbeddingProvider:
-    """
-    Генерация эмбеддингов через GigaChat Embeddings.
-    
-    Использует embedding_text, подготовленный в silver-layer.
-    """
-
     def __init__(self):
         self.client = GigaChat(
             credentials=os.getenv("GIGACHAT_CREDENTIALS"),
@@ -20,43 +15,26 @@ class GigaChatEmbeddingProvider:
         )
 
     def prepare_embedding_text(self, news: Dict[str, Any], max_chars: int = 1800) -> str:
-        """
-        Берёт готовый embedding_text из silver-layer.
-        Это единый source of truth.
-        """
+        title = news.get("title", "")
+        body = news.get("normalized_text", "")
 
-        text = news.get("embedding_text") or ""
+        text = f"TITLE: {title}\nCONTENT: {body}".strip()
 
-        if not text:
-            # fallback (на случай старых данных)
-            title = news.get("text", "").split("\n")[0]
-            body = news.get("normalized_text", "")
-            text = f"TITLE: {title}\nCONTENT: {body}"
-
-        text = text.strip()
-
-        # безопасное обрезание без разрыва слов
         if len(text) > max_chars:
             text = text[:max_chars].rsplit(" ", 1)[0]
 
         return text
 
+    # Получает embedding одного текста
     def get_embedding(self, text: str) -> List[float]:
-        """
-        Получает embedding одного текста через GigaChat.
-        """
-
         response = self.client.embeddings(
             texts=[text]
         )
 
         return response.data[0].embedding
 
+    # Добавляет embeddings к списку новостей
     def add_embeddings(self, news_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Добавляет embeddings к списку новостей.
-        """
-
         total = len(news_list)
 
         for i, news in enumerate(news_list, start=1):
@@ -66,6 +44,5 @@ class GigaChatEmbeddingProvider:
             embedding = self.get_embedding(text)
 
             news["embedding"] = embedding
-            news["embedding_text_used"] = text  # для дебага
 
         return news_list

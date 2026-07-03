@@ -2,11 +2,8 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List
 
+# Поиск семантически похожих новостей
 class DuplicateFinder:
-    """
-    Поиск семантически похожих новостей.
-    """
-
     def __init__(self, threshold: float = 0.90):
         self.threshold = threshold
 
@@ -35,9 +32,9 @@ class DuplicateFinder:
         for similarity, i, j in pairs[:top_k]:
             print("=" * 80)
             print(f"Similarity: {similarity:.4f}\n")
-            print(news_list[i]["normalized_title"])
+            print(news_list[i]["title"])
             print()
-            print(news_list[j]["normalized_title"])
+            print(news_list[j]["title"])
             print()
 
     def mark_duplicates(self, news_list: List[dict]) -> List[dict]:
@@ -57,12 +54,16 @@ class DuplicateFinder:
 
                     news_list[i]["duplicates"].append({
                         "id": news_list[j]["id"],
-                        "similarity": round(similarity, 4)
+                        "similarity": round(similarity, 4),
+                        "source": news_list[j]["source"],
+                        "url": news_list[j]["url"]
                     })
 
                     news_list[j]["duplicates"].append({
                         "id": news_list[i]["id"],
-                        "similarity": round(similarity, 4)
+                        "similarity": round(similarity, 4),
+                        "source": news_list[i]["source"],
+                        "url": news_list[i]["url"]
                     })
 
         return news_list
