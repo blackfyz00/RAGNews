@@ -18,3 +18,4 @@ async def bronze_pipeline():
     saved_bronze_data = await save_to_bronze_layer_db(
         data=raw_bronze_pool
     )
+    return saved_bronze_data
