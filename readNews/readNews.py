@@ -17,4 +17,4 @@ async def main_pipeline():
     # await gold_pipeline(silver_data)
 
 if __name__ == "__main__":
-о
+    asyncio.run(main_pipeline())

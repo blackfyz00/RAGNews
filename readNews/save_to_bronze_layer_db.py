@@ -1,23 +1,11 @@
-import os
-import json
 from datetime import datetime
-from pathlib import Path
 from prefect import task, get_run_logger
 import asyncpg
 from dotenv import load_dotenv
+from DB_CONFIG import DB_CONFIG
+from ENV_PATH import ENV_PATH
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(ENV_PATH)
-
-DB_CONFIG = {
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "database": os.getenv("DB_NAME"),
-    "host": os.getenv("DB_HOST"),
-    "port": int(os.getenv("DB_PORT", 5432)) 
-}
-
 @task(retries=2, retry_delay_seconds=15, name="Сохранение в Бронзовый слой БД")
 async def save_to_bronze_layer_db(data: list[dict]) -> list[dict]:
     """
