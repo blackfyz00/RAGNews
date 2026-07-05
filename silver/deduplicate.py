@@ -2,7 +2,6 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List
 
-# Поиск семантически похожих новостей
 class DuplicateFinder:
     def __init__(self, threshold: float = 0.90):
         self.threshold = threshold
@@ -11,7 +10,6 @@ class DuplicateFinder:
         embeddings = np.array(
             [np.array(n["embedding"], dtype=np.float32) for n in news_list]
         )
-
         return cosine_similarity(embeddings)
 
     def print_top_pairs(self, news_list: List[dict], top_k: int = 10):
@@ -19,10 +17,9 @@ class DuplicateFinder:
         sim = self.similarity_matrix(news_list)
 
         pairs = []
-        n = len(news_list)
 
-        for i in range(n):
-            for j in range(i + 1, n):
+        for i in range(len(news_list)):
+            for j in range(i + 1, len(news_list)):
                 pairs.append((sim[i][j], i, j))
 
         pairs.sort(reverse=True)
@@ -37,33 +34,50 @@ class DuplicateFinder:
             print(news_list[j]["title"])
             print()
 
-    def mark_duplicates(self, news_list: List[dict]) -> List[dict]:
-
+    # объединяем семантически одинаковые новости, оставляем первую из них, ссылки всех новостей храним в поле links
+    def merge_duplicates(self, news_list: List[dict]) -> List[dict]:
         sim = self.similarity_matrix(news_list)
-        n = len(news_list)
+        visited = set()
+        result = []
 
-        for news in news_list:
-            news["duplicates"] = []
+        for i in range(len(news_list)):
+            if i in visited:
+                continue
 
-        for i in range(n):
-            for j in range(i + 1, n):
+            group = [i]
+            visited.add(i)
 
-                similarity = float(sim[i][j])
+            for j in range(i + 1, len(news_list)):
+                if j in visited:
+                    continue
 
-                if similarity >= self.threshold:
+                if sim[i][j] >= self.threshold:
+                    group.append(j)
+                    visited.add(j)
 
-                    news_list[i]["duplicates"].append({
-                        "id": news_list[j]["id"],
-                        "similarity": round(similarity, 4),
-                        "source": news_list[j]["source"],
-                        "url": news_list[j]["url"]
-                    })
+            main_news = news_list[group[0]].copy()
 
-                    news_list[j]["duplicates"].append({
-                        "id": news_list[i]["id"],
-                        "similarity": round(similarity, 4),
-                        "source": news_list[i]["source"],
-                        "url": news_list[i]["url"]
-                    })
+            links = []
+            sources = []
 
-        return news_list
+            for idx in group:
+                url = news_list[idx]["url"]
+
+                if url and url not in links:
+                    links.append(url)
+
+                source = news_list[idx]["source"]
+
+                if source and source not in sources:
+                    sources.append(source)
+
+            main_news["links"] = links
+            main_news["sources"] = sources
+
+            result.append(main_news)
+
+        print(
+            f"\nУдалено дублей: {len(news_list) - len(result)}"
+        )
+
+        return result
