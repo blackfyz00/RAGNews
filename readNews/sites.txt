@@ -1,2 +1,2 @@
-https://ria.ru
-https://rbc.ru
+http://lenta.ru/rss/news
+https://ria.ru/export/rss2/archive/index.xml

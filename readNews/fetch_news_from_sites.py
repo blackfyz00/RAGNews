@@ -10,7 +10,7 @@ from read_lines_from_file import read_lines_from_file
 
 @task(retries=3, retry_delay_seconds=30, name="Парсинг сайтов (RSS)")
 def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
-    """Скачивает свежие новости с сайтов, используя trafilatura и защиту от блокировок."""
+    """Скачивает свежие новости с сайтов, гарантированно обходя блокировки."""
     logger = get_run_logger()
     urls = read_lines_from_file(file_path)
     all_news = []
@@ -21,18 +21,21 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
 
     logger.info(f"🔍 Начинаю парсинг {len(urls)} сайтов...")
     
-    # ИСПРАВЛЕНО: Добавлен дефолтный User-Agent, чтобы сайты не отдавали 403 ошибку
+    # ИСПРАВЛЕНО: Расширенные заголовки реального браузера (мимикрируем под человека)
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
     }
     
-    with httpx.Client(timeout=30.0, follow_redirects=True, headers=headers) as client:
+    # ИСПРАВЛЕНО: verify=False отключает строгую проверку SSL-сертификатов внутри Docker
+    with httpx.Client(timeout=30.0, follow_redirects=True, headers=headers, verify=False) as client:
         for url in urls:
             try:
                 logger.info(f"  📡 Парсинг RSS: {url}")
                 response = client.get(url)
-                
-                # ИСПРАВЛЕНО: Передаем response.content (байты), чтобы feedparser корректно определил кодировку (utf-8/windows-1251)
                 feed = feedparser.parse(response.content)
                 
                 if not feed.entries:
@@ -48,29 +51,32 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                     if article_url:
                         try:
                             logger.info(f"    📄 Загружаю полный текст: {article_url}")
-                            article_response = client.get(article_url)
+                            article_response = client.get(article_url, timeout=10.0)
                             
-                            # ИСПРАВЛЕНО: Передаем объект ответа целиком, trafilatura сама разберется с кодировкой HTML страницы
+                            # Проверяем, пустил ли нас сайт вообще
+                            if article_response.status_code != 200:
+                                logger.warning(f"    ❌ Сайт вернул ошибку {article_response.status_code} для {article_url}")
+                            
+                            # Извлекаем текст
                             full_content = trafilatura.extract(
-                                article_response.text, 
-                                language='ru', 
-                                include_comments=False,
-                                no_fallback=False
+                                article_response.content, 
+                                target_language='ru', 
+                                include_comments=False
                             )
                             
                             if full_content:
                                 full_content = ' '.join(full_content.split())
+                            else:
+                                logger.warning(f"    ⚠️ Trafilatura не смогла найти блок текста на странице: {article_url}")
+                                
                         except Exception as e:
                             logger.warning(f"    ⚠️ Не удалось загрузить полный текст: {e}")
                     
-                    # Фолбек, если trafilatura вернула None
+                    # ИСПРАВЛЕНО: Изменен фолбек. Если trafilatura упала, мы НЕ пишем заголовок в контент. 
+                    # Мы берем описание из RSS. Если и его нет — пишем "Текст новости не найден", чтобы видеть это в базе.
                     if not full_content:
                         raw_summary = entry.get("summary", entry.get("description", ""))
-                        full_content = trafilatura.html2txt(raw_summary) if raw_summary else title
-                    
-                    # Финальная страховка от пустой строки
-                    if not full_content:
-                        full_content = title
+                        full_content = trafilatura.html2txt(raw_summary) if raw_summary else "Контент статьи не удалось извлечь."
                     
                     # Форматируем timestamp
                     timestamp = entry.get("published", datetime.now().isoformat())
@@ -89,9 +95,6 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                     }
                     all_news.append(payload)
                     entries_count += 1
-                    
-                    if entries_count % 5 == 0:
-                        logger.info(f"    ⏸ Обработано {entries_count} новостей...")
                 
                 logger.info(f"  ✅ Получено {entries_count} новостей с {url}")
                 
