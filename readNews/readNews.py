@@ -17,4 +17,12 @@ async def main_pipeline():
     # await gold_pipeline(silver_data)
 
 if __name__ == "__main__":
-    asyncio.run(main_pipeline())
+    import os
+    # Говорим скрипту смотреть на локальный сервер
+    os.environ["PREFECT_API_URL"] = "http://127.0.0"
+    
+    # serve() регистрирует флоу и превращает скрипт в постоянного воркера
+    main_pipeline.serve(
+        name="medallion-cron-deployment",
+        cron="*/90 * * * *"  # Будет сам запускаться каждые 15 минут
+    )

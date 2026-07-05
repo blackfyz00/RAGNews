@@ -24,12 +24,16 @@ services:
   news_pipeline:
     build: ./readNews
     container_name: read_news_app
+    ports:
+      - "8210:8210"
     env_file:
       - ./.env
     environment:
       - PREFECT_HOME=/app/.prefect
       - PREFECT_API_DATABASE_CONNECTION_URL=${PREFECT_API_DATABASE_CONNECTION_URL}
       - PREFECT_SERVER_EPHEMERAL_STARTUP_TIMEOUT_SECONDS=60
+      - PREFECT_API_URL=http://read_news_app:8210/api
+      - PREFECT_UI_API_URL=http://localhost:8210/api
     # Настраиваем строгое ожидание готовности БД
     depends_on:
       db:
