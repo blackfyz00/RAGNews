@@ -43,9 +43,28 @@ async def main():
     finder = DuplicateFinder(threshold=0.92, silver_data=silver_data)
     finder.print_top_pairs(news)  # Вывод дубликатов
     news = finder.merge_duplicates(news)
+    
+    duplicates_to_update = getattr(finder, 'duplicates_to_update', [])
+    links_to_add = {}
+    for dup in duplicates_to_update:
+        silver_id = dup.get("silver_id")
+        new_url = dup.get("new_url")
+        if silver_id and new_url:
+            if silver_id not in links_to_add:
+                links_to_add[silver_id] = []
+            links_to_add[silver_id].append(new_url)
 
     silver_news = []
     for item in news:
+        current_links = item.get("links", [item.get("url", "")])
+
+        silver_id = item.get("id")
+        if silver_id and silver_id in links_to_add:
+            for url in links_to_add[silver_id]:
+                if url not in current_links:
+                    current_links.append(url)
+            print(f"   ✅ Добавлены ссылки в links для id={silver_id}: {links_to_add[silver_id]}")
+        
         silver_news.append({
             "id": item.get("id"),
             "source_name": item.get("source"),
@@ -54,7 +73,7 @@ async def main():
                     if item.get("timestamp") else None,
             "normalized_title": item.get("title", ""),
             "normalized_content": item.get("normalized_text", ""),
-            "links": item.get("links", [item.get("url", "")]),
+            "links": current_links,
             "hash": item.get("hash", ""),
             "embeddings": item.get("embedding", [])
         })

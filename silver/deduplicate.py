@@ -20,8 +20,7 @@ class DuplicateFinder:
         
         self.silver_embeddings = None
         self.silver_data = silver_data or []
-    
-        # Если переданы данные, сразу строим матрицу
+
         if self.silver_data:
             self._build_silver_matrix()
 
@@ -37,17 +36,27 @@ class DuplicateFinder:
             matrix = np.array(embeddings)
             self.silver_embeddings = normalize(matrix, norm='l2')
 
-    def check_against_silver(self, news_list: List[dict]) -> List[dict]:
-        """Проверяет новые новости на дубликаты с существующими в silver"""
-        if not self.silver_data:
-            return news_list
-
-        silver_hashes = {item.get("hash") for item in self.silver_data if item.get("hash")}
-
+    def check_against_silver(self, news_list: List[dict]) -> tuple[List[dict], List[dict]]:
+        """
+        Проверяет новые новости на дубликаты с существующими в silver.
+        Возвращает: (уникальные_новости, список_дубликатов_для_обновления_links)
+        """
+        if self.silver_embeddings is None or len(self.silver_data) == 0:
+            return news_list, []
+        
+        silver_hashes = {item.get("hash"): item for item in self.silver_data if item.get("hash")}
+        
         unique_news = []
+        duplicates_to_update = []
+        
         for item in news_list:
             if item.get("hash") and item["hash"] in silver_hashes:
+                existing = silver_hashes[item["hash"]]
                 print(f"⏭️  Точный дубликат по хэшу: {item.get('title', '')[:50]}...")
+                duplicates_to_update.append({
+                    "silver_id": existing["id"],
+                    "new_url": item.get("url")
+                })
                 continue
 
             embedding = item.get("embedding")
@@ -61,12 +70,17 @@ class DuplicateFinder:
             
             if max_sim >= self.threshold:
                 idx = similarities.argmax()
-                print(f"⏭️  Семантический дубликат (сходство {max_sim:.4f}) с: {self.silver_data[idx].get('title', '')[:50]}...")
+                existing = self.silver_data[idx]
+                print(f"⏭️  Семантический дубликат (сходство {max_sim:.4f}) с: {existing.get('title', '')[:50]}...")
+                duplicates_to_update.append({
+                    "silver_id": existing["id"],
+                    "new_url": item.get("url")
+                })
                 continue
             
             unique_news.append(item)
         
-        return unique_news
+        return unique_news, duplicates_to_update
 
     def compute_hash(self, item: dict) -> str:
         """
@@ -85,10 +99,8 @@ class DuplicateFinder:
         Находит группы точных дубликатов по хэшу.
         Возвращает список множеств индексов дубликатов.
         """
-        # Группируем индексы по хэшу
         self.hash_to_indices.clear()
         for idx, item in enumerate(news_list):
-            # hash_val = item.get("hash")
             hash_val = self.compute_hash(item)
             self.hash_to_indices[hash_val].append(idx)
             item["hash"] = hash_val
@@ -182,8 +194,7 @@ class DuplicateFinder:
         )
         embeddings_normalized = normalize(embeddings, norm='l2')
         sim = cosine_similarity(embeddings_normalized)
-        
-        # Находим семантические дубликаты
+
         semantic_groups = []
         visited = set()
         
@@ -213,9 +224,9 @@ class DuplicateFinder:
             is_in_group = False
             for group in semantic_groups:
                 if i in group:
-                    if group[0] == i:  # Это первый элемент группы (сохраняем)
+                    if group[0] == i:
                         final_news.append(item)
-                    else:  # Это дубликат (удаляем)
+                    else:
                         semantic_removed += 1
                     is_in_group = True
                     break
@@ -223,10 +234,12 @@ class DuplicateFinder:
             if not is_in_group:
                 final_news.append(item)
                 
+        duplicates_to_update = []
         if self.silver_data:
             print("\n🔍 ШАГ 3: Проверка с существующими в silver...")
-            final_news = self.check_against_silver(final_news)
+            final_news, duplicates_to_update = self.check_against_silver(final_news)
         
+        self.duplicates_to_update = duplicates_to_update
         print(f"   Семантических дубликатов удалено: {semantic_removed}")
         print(f"   Итоговое количество новостей: {len(final_news)}")
         
