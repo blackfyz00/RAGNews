@@ -13,8 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
-
-     # Добавляем проверку готовности базы данных
+    # Добавляем проверку готовности базы данных
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d it_news_rag"]
       interval: 5s
@@ -35,6 +34,16 @@ services:
       - PREFECT_API_URL=http://read_news_app:8210/api
       - PREFECT_UI_API_URL=http://localhost:8210/api
     # Настраиваем строгое ожидание готовности БД
+    depends_on:
+      db:
+        condition: service_healthy
+
+  telegram_bot:
+    build: ./client_bot
+    container_name: tg_client_bot
+    restart: always
+    env_file:
+      - ./.env
     depends_on:
       db:
         condition: service_healthy
