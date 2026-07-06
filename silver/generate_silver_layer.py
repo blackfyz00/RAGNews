@@ -1,46 +1,69 @@
+import asyncio
+import sys
+from pathlib import Path
 from utils import *
 from normalize import *
 from embeddings import *
 from deduplicate import *
+from datetime import datetime
 
-bronze = PROJECT_ROOT / "readNews" / "test.txt"
-output = PROJECT_ROOT / "silver" / "silver.json"
+root_path = Path(__file__).resolve().parent.parent
+if str(root_path) not in sys.path:
+    sys.path.append(str(root_path))
 
-news = load_json(bronze)
+from load_bronze import load_news_from_db
+from save_to_silver_layer_db import save_silver_to_db
 
-for item in news:
-    item.setdefault("id", generate_news_id())
 
-news = normalize_news_list(news)
+from silver.load_silver import load_silver_data
 
-provider = GigaChatEmbeddingProvider()
-news = provider.add_embeddings(news)
+async def main():
+    """
+    Основная функция обработки новостей (Silver слой)
+    """
+    print("\nЗАПУСК SILVER LAYER\n")
+    
+    news = await load_news_from_db()
+    
+    if not news:
+        print("Нет новых новостей для обработки")
+        return
 
-finder = DuplicateFinder()
+    for item in news:
+        if not item.get("id"):
+            item["id"] = generate_news_id()
 
-finder.print_top_pairs(news)
+    news = normalize_news_list(news)
 
-news = finder.merge_duplicates(news) # удаляем дубли
+    provider = GigaChatEmbeddingProvider()
+    news = provider.add_embeddings(news)
+    
+    silver_data = await load_silver_data()
 
-silver_news = []
+    finder = DuplicateFinder(threshold=0.92, silver_data=silver_data)
+    finder.print_top_pairs(news)  # Вывод дубликатов
+    news = finder.merge_duplicates(news)
 
-for item in news:
-    silver_news.append({
+    silver_news = []
+    for item in news:
+        silver_news.append({
+            "id": item.get("id"),
+            "source_name": item.get("source"),
+            "url": item.get("url"),
+            "date": datetime.strptime(item.get("timestamp", "").split()[0], "%Y-%m-%d").date() 
+                    if item.get("timestamp") else None,
+            "normalized_title": item.get("title", ""),
+            "normalized_content": item.get("normalized_text", ""),
+            "links": item.get("links", [item.get("url", "")]),
+            "hash": item.get("hash", ""),
+            "embeddings": item.get("embedding", [])
+        })
 
-        "source_name": item["source"],
+    await save_silver_to_db(silver_news)
 
-        "url": item["url"],
+    print("SILVER LAYER ЗАВЕРШЕН!")
+    print(f"Обработано новостей: {len(silver_news)}")
 
-        "date": item["timestamp"].split()[0],
 
-        "normalized_title": item["title"],
-
-        "normalized_content": item["normalized_text"],
-
-        "links": item.get("links", [item["url"]]),
-
-        "embeddings": item["embedding"]
-
-    })
-
-save_json(silver_news, output)
+if __name__ == "__main__":
+    asyncio.run(main())

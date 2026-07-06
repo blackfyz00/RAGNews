@@ -5,7 +5,6 @@ from gigachat import GigaChat
 
 load_dotenv()
 
-# Генерация эмбеддингов, использует embedding_text
 class GigaChatEmbeddingProvider:
     def __init__(self):
         self.client = GigaChat(
@@ -25,7 +24,6 @@ class GigaChatEmbeddingProvider:
 
         return text
 
-    # Получает embedding одного текста
     def get_embedding(self, text: str) -> List[float]:
         response = self.client.embeddings(
             texts=[text]
