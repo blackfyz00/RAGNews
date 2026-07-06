@@ -1,4 +1,4 @@
-import asyncio
+from prefect import flow
 import sys
 from pathlib import Path
 from utils import *
@@ -17,7 +17,8 @@ from save_to_silver_layer_db import save_silver_to_db
 
 from silver.load_silver import load_silver_data
 
-async def main():
+@flow(name="Новостной конвейер: Бронзовый Слой")
+async def silver_pipeline():
     """
     Основная функция обработки новостей (Silver слой)
     """
@@ -82,7 +83,3 @@ async def main():
 
     print("SILVER LAYER ЗАВЕРШЕН!")
     print(f"Обработано новостей: {len(silver_news)}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
