@@ -1,4 +1,5 @@
 from prefect import flow
+import asyncio
 import sys
 from pathlib import Path
 from utils import *
@@ -83,3 +84,6 @@ async def silver_pipeline():
 
     print("SILVER LAYER ЗАВЕРШЕН!")
     print(f"Обработано новостей: {len(silver_news)}")
+
+if __name__ == "__main__":
+    asyncio.run(silver_pipeline())
