@@ -17,6 +17,7 @@ TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 async def main_pipeline():
     await bronze_pipeline()
     await silver_pipeline()
+    print("ВРЕМЯ ЗОЛОТОГО СЛОЯ")
     await gold_pipeline()
 
 if __name__ == "__main__":

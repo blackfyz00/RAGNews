@@ -33,7 +33,8 @@ services:
       - PREFECT_SERVER_EPHEMERAL_STARTUP_TIMEOUT_SECONDS=60
       - PREFECT_API_URL=http://read_news_app:8210/api
       - PREFECT_UI_API_URL=http://localhost:8210/api
-    # Настраиваем строгое ожидание готовности БД
+    volumes:
+      - ./readNews:/app/
     depends_on:
       db:
         condition: service_healthy
