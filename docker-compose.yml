@@ -38,15 +38,15 @@ services:
       db:
         condition: service_healthy
 
-  telegram_bot:
-    build: ./client_bot
-    container_name: tg_client_bot
-    restart: always
-    env_file:
-      - ./.env
-    depends_on:
-      db:
-        condition: service_healthy
+  # telegram_bot:
+  #   build: ./client_bot
+  #   container_name: tg_client_bot
+  #   restart: always
+  #   env_file:
+  #     - ./.env
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
 
 volumes:
   postgres_data:

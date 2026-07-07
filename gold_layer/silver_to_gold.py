@@ -131,7 +131,3 @@ async def gold_pipeline() -> int:
             await conn.close()
             
     return processed_count
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(gold_pipeline())

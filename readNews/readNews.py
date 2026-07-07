@@ -3,6 +3,12 @@ import asyncio
 from prefect import flow
 from dotenv import load_dotenv
 from bronze_pipeline import bronze_pipeline
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+from silver.generate_silver_layer import silver_pipeline
+from gold_layer.silver_to_gold import gold_pipeline
 
 load_dotenv('telegram_creds.env')
 TELEGRAM_API_ID = os.getenv('TELEGRAM_API_ID')
@@ -12,9 +18,9 @@ TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 
 @flow(name="Главный Новостной Конвейер: Medallion")
 async def main_pipeline():
-    bronze_data = await bronze_pipeline()
-    # silver_data = await silver_pipeline(bronze_data)
-    # await gold_pipeline(silver_data)
+    await bronze_pipeline()
+    await silver_pipeline()
+    await gold_pipeline()
 
 if __name__ == "__main__":
     import os

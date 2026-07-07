@@ -18,7 +18,7 @@ from save_to_silver_layer_db import save_silver_to_db
 
 from silver.load_silver import load_silver_data
 
-@flow(name="Новостной конвейер: Бронзовый Слой")
+@flow(name="Новостной конвейер: Серебряный Слой")
 async def silver_pipeline():
     """
     Основная функция обработки новостей (Silver слой)
@@ -84,6 +84,3 @@ async def silver_pipeline():
 
     print("SILVER LAYER ЗАВЕРШЕН!")
     print(f"Обработано новостей: {len(silver_news)}")
-
-if __name__ == "__main__":
-    asyncio.run(silver_pipeline())
