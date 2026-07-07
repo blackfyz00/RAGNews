@@ -1,22 +1,14 @@
 from prefect import flow
-import asyncio
-import sys
 from pathlib import Path
-from utils import *
-from normalize import *
-from embeddings import *
-from deduplicate import *
+from .utils import *
+from .normalize import *
+from .embeddings import *
+from .deduplicate import *
 from datetime import datetime
 
-root_path = Path(__file__).resolve().parent.parent
-if str(root_path) not in sys.path:
-    sys.path.append(str(root_path))
-
-from load_bronze import load_news_from_db
-from save_to_silver_layer_db import save_silver_to_db
-
-
-from silver.load_silver import load_silver_data
+from .load_bronze import load_news_from_db
+from .save_to_silver_layer_db import save_silver_to_db
+from .load_silver import load_silver_data
 
 @flow(name="Новостной конвейер: Серебряный Слой")
 async def silver_pipeline():

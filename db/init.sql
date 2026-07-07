@@ -16,10 +16,11 @@ CREATE TABLE IF NOT EXISTS silver ( -- очищенный от дубликат�
     source_name TEXT, -- Название источника: Habr, TechCrunch @proglib, Ria
     url TEXT, -- URL новости
     date DATE, -- дата публикации новости
+    hash TEXT, -- хэш
     normalized_title TEXT, -- Заголовок новости
     normalized_content TEXT, -- текст структурирован и очищен
     links TEXT ARRAY, -- список ссылок
-    embeddings VECTOR(1536) -- те же эмбеддинги
+    embeddings VECTOR(1024) -- те же эмбеддинги
 );
 
 CREATE TABLE IF NOT EXISTS gold (
@@ -31,5 +32,5 @@ CREATE TABLE IF NOT EXISTS gold (
     url TEXT, -- URL новости
     date DATE, -- дата публикации новости
     links TEXT ARRAY, -- список ссылок
-    embeddings VECTOR(1536) -- те же эмбеддинги
+    embeddings VECTOR(1024) -- те же эмбеддинги
 );

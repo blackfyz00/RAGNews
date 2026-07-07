@@ -9,7 +9,7 @@ import trafilatura
 from read_lines_from_file import read_lines_from_file
 
 @task(retries=3, retry_delay_seconds=30, name="Парсинг сайтов (RSS)")
-def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
+async def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
     """Скачивает свежие новости с сайтов, гарантированно обходя блокировки."""
     logger = get_run_logger()
     urls = read_lines_from_file(file_path)
@@ -21,7 +21,6 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
 
     logger.info(f"🔍 Начинаю парсинг {len(urls)} сайтов...")
     
-    # ИСПРАВЛЕНО: Расширенные заголовки реального браузера (мимикрируем под человека)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -30,12 +29,11 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
         "Pragma": "no-cache"
     }
     
-    # ИСПРАВЛЕНО: verify=False отключает строгую проверку SSL-сертификатов внутри Docker
-    with httpx.Client(timeout=30.0, follow_redirects=True, headers=headers, verify=False) as client:
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=headers, verify=False) as client:
         for url in urls:
             try:
                 logger.info(f"  📡 Парсинг RSS: {url}")
-                response = client.get(url)
+                response = await client.get(url)
                 feed = feedparser.parse(response.content)
                 
                 if not feed.entries:
@@ -51,13 +49,11 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                     if article_url:
                         try:
                             logger.info(f"    📄 Загружаю полный текст: {article_url}")
-                            article_response = client.get(article_url, timeout=10.0)
+                            article_response = await client.get(article_url, timeout=10.0)
                             
-                            # Проверяем, пустил ли нас сайт вообще
                             if article_response.status_code != 200:
                                 logger.warning(f"    ❌ Сайт вернул ошибку {article_response.status_code} для {article_url}")
                             
-                            # Извлекаем текст
                             full_content = trafilatura.extract(
                                 article_response.content, 
                                 target_language='ru', 
@@ -72,13 +68,10 @@ def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                         except Exception as e:
                             logger.warning(f"    ⚠️ Не удалось загрузить полный текст: {e}")
                     
-                    # ИСПРАВЛЕНО: Изменен фолбек. Если trafilatura упала, мы НЕ пишем заголовок в контент. 
-                    # Мы берем описание из RSS. Если и его нет — пишем "Текст новости не найден", чтобы видеть это в базе.
                     if not full_content:
                         raw_summary = entry.get("summary", entry.get("description", ""))
                         full_content = trafilatura.html2txt(raw_summary) if raw_summary else "Контент статьи не удалось извлечь."
                     
-                    # Форматируем timestamp
                     timestamp = entry.get("published", datetime.now().isoformat())
                     try:
                         dt = date_parser.parse(timestamp)

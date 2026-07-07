@@ -1,12 +1,9 @@
 import os
-import asyncio
 from prefect import flow
 from dotenv import load_dotenv
 from bronze_pipeline import bronze_pipeline
-import sys
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
+from bronze_pipeline import bronze_pipeline
 from silver.generate_silver_layer import silver_pipeline
 from gold_layer.silver_to_gold import gold_pipeline
 

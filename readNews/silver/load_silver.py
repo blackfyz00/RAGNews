@@ -2,8 +2,10 @@ import asyncpg
 import json
 import numpy as np
 from typing import List, Dict
+from pathlib import Path
 
-from readNews.DB_CONFIG import DB_CONFIG
+root_path = Path(__file__).resolve().parent.parent
+from DB_CONFIG import DB_CONFIG
 
 async def load_silver_data() -> List[Dict]:
     """

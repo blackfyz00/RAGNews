@@ -1,5 +1,3 @@
-import os
-import json
 from datetime import datetime
 import httpx
 from bs4 import BeautifulSoup
@@ -9,7 +7,7 @@ from prefect import task, get_run_logger
 from read_lines_from_file import read_lines_from_file
 
 @task(retries=3, retry_delay_seconds=30, name="Парсинг Telegram каналов")
-def fetch_news_from_telegram(file_path: str = "tgch.txt") -> list[dict]:
+async def fetch_news_from_telegram(file_path: str = "tgch.txt") -> list[dict]:
     """
     Парсит последние посты из Telegram каналов, указанных в файле tgch.txt.
     В timestamp пишется реальное время публикации поста.
@@ -36,7 +34,7 @@ def fetch_news_from_telegram(file_path: str = "tgch.txt") -> list[dict]:
             
             with httpx.Client(timeout=15.0, follow_redirects=True) as client:
                 try:
-                    response = client.get(tg_url)
+                    response = await client.get(tg_url)
                     soup = BeautifulSoup(response.text, 'html.parser')
                     
                     messages = soup.find_all('div', class_='tgme_widget_message_wrap')

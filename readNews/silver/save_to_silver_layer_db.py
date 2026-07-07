@@ -1,5 +1,8 @@
 import asyncpg
-from readNews.DB_CONFIG import DB_CONFIG
+
+from pathlib import Path
+root_path = Path(__file__).resolve().parent.parent
+from DB_CONFIG import DB_CONFIG
 
 async def save_silver_to_db(silver_news: list[dict]):
     """

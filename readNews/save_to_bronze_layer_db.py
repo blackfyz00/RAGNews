@@ -1,16 +1,18 @@
+import os
 from datetime import datetime
 from prefect import task, get_run_logger
-import asyncpg
 from dotenv import load_dotenv
-from DB_CONFIG import DB_CONFIG
+from sqlalchemy import text
+
 from ENV_PATH import ENV_PATH
+from database import get_async_session_factory 
 
 load_dotenv(ENV_PATH)
-@task(retries=2, retry_delay_seconds=15, name="Сохранение в Бронзовый слой БД")
+
+@task(retries=2, retry_delay_seconds=15, name="Сохранение в Бронзовый слой БД (SQLAlchemy)")
 async def save_to_bronze_layer_db(data: list[dict]) -> list[dict]:
     """
-    Принимает список новостей (payload) и сохраняет их в таблицу bronze.
-    Возвращает список только успешно добавленных (новых) новостей.
+    Принимает список новостей (payload) и сохраняет их в таблицу bronze через SQLAlchemy.
     """
     logger = get_run_logger()
     
@@ -19,69 +21,72 @@ async def save_to_bronze_layer_db(data: list[dict]) -> list[dict]:
         return []
 
     saved_news = []
+    logger.info(f"💾 Начинаю импорт {len(data)} новостей в PostgreSQL через SQLAlchemy...")
     
-    # Подключаемся, используя настройки из env
-    conn = await asyncpg.connect(**DB_CONFIG)
+    # ИСПРАВЛЕНО: Создаем фабрику сессий динамически внутри таски
+    async_session_factory = get_async_session_factory()
     
-    try:
-        logger.info(f"💾 Начинаю импорт {len(data)} новостей в PostgreSQL...")
-        
-        for item in data:
-            url = item.get("url", "")
-            url = url.strip() if url else ""
-            
-            if not url:
-                continue # Пропускаем записи без URL, их невозможно проверить на уникальность
-            
-            # Проверяем уникальность
-            exists = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM bronze WHERE url = $1)", url
-            )
-            
-            if exists:
-                continue
-                
-            full_content = item.get("content", "") or ""
-            
-            # Извлекаем title корректно (ИСПРАВЛЕНО: безопасная обработка строк)
-            if full_content and "\n" in full_content:
-                title = full_content.split("\n")[0].strip()
-            else:
-                title = full_content[:100].strip() if full_content else "Без названия"
-            
-            # Парсинг даты для PostgreSQL типа DATE (ИСПРАВЛЕНО: защита от IndexError)
-            raw_date = item.get("timestamp", "")
-            parsed_date = datetime.now().date()
-            
-            if raw_date and isinstance(raw_date, str):
-                try:
-                    date_parts = raw_date.split()
-                    if date_parts:
-                        parsed_date = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
-                except Exception:
-                    pass # Если формат не подошел, останется datetime.now().date()
+    # 1. Открываем сессию из асинхронного пула Алхимии
+    async with async_session_factory() as session:
+        try:
+            # 2. Открываем транзакцию
+            async with session.begin():
+                for item in data:
+                    url = item.get("url", "")
+                    url = url.strip() if url else ""
+                    
+                    if not url:
+                        continue
+                    
+                    check_query = text("SELECT EXISTS(SELECT 1 FROM bronze WHERE url = :url)")
+                    result = await session.execute(check_query, {"url": url})
+                    exists = result.scalar()
+                    
+                    if exists:
+                        continue
+                        
+                    full_content = item.get("content", "") or ""
+                    
+                    if full_content and "\n" in full_content:
+                        title = full_content.split("\n")[0].strip()
+                    else:
+                        title = full_content[:100].strip() if full_content else "Без названия"
+                    
+                    raw_date = item.get("timestamp", "")
+                    parsed_date = datetime.now().date()
+                    
+                    if raw_date and isinstance(raw_date, str):
+                        try:
+                            date_parts = raw_date.split()
+                            if date_parts:
+                                parsed_date = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+                        except Exception:
+                            pass
 
-            # Запись в базу
-            await conn.execute(
-                """
-                INSERT INTO bronze (source_name, url, title, content, date)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                item.get("source"),
-                url,
-                title,
-                full_content,
-                parsed_date
-            )
+                    insert_query = text("""
+                        INSERT INTO bronze (source_name, url, title, content, date)
+                        VALUES (:source_name, :url, :title, :content, :date)
+                    """)
+                    
+                    await session.execute(
+                        insert_query,
+                        {
+                            "source_name": item.get("source"),
+                            "url": url,
+                            "title": title,
+                            "content": full_content,
+                            "date": parsed_date
+                        }
+                    )
+                    saved_news.append(item)
+                    
+            logger.info(f"✅ Успешно сохранено новых новостей в БД: {len(saved_news)}")
             
-            saved_news.append(item)
+        except Exception as e:
+            logger.error(f"❌ Ошибка при работе с базой данных: {e}")
+            raise e
             
-        logger.info(f"✅ Успешно сохранено новых новостей в БД: {len(saved_news)}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка при работе с базой данных: {e}")
-        raise e
-    finally:
-        await conn.close()
-        
+    # Принудительно закрываем движок сессии, освобождая ресурсы подпроцесса
+    await async_session_factory.kw['bind'].dispose()
+    
     return saved_news

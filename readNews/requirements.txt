@@ -7,3 +7,6 @@ python-dotenv
 asyncpg
 gigachat
 trafilatura
+sqlalchemy
+numpy
+scikit-learn
