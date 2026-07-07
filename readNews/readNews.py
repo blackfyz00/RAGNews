@@ -1,7 +1,7 @@
 import os
-from prefect import flow
+import asyncio  
+from prefect import flow, aserve  # ИСПОЛЬЗУЕМ АСИНХРОННЫЙ aserve
 from dotenv import load_dotenv
-from bronze_pipeline import bronze_pipeline
 
 from bronze_pipeline import bronze_pipeline
 from silver.generate_silver_layer import silver_pipeline
@@ -17,16 +17,32 @@ TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 async def main_pipeline():
     await bronze_pipeline()
     await silver_pipeline()
-    print("ВРЕМЯ ЗОЛОТОГО СЛОЯ")
     await gold_pipeline()
 
+async def create_deployments():
+    """
+    Асинхронно формирует конфигурацию для двух раздельных деплойментов в Prefect 3.x.
+    """
+    # 1. Готовим деплоймент для полного конвейера (Раз в 90 минут)
+    full_monolith_deployment = await main_pipeline.to_deployment(
+        name="medallion-cron-deployment",
+        cron="*/90 * * * *",
+        tags=["full_pipeline"]
+    )
+
+    # 2. Готовим отдельный деплоймент для Gold-слоя (Раз в 15 минут)
+    gold_layer_deployment = await gold_pipeline.to_deployment(
+        name="gold-layer-fast-cron",
+        tags=["llm", "gold"]
+    )
+
+    # Запускаем асинхронный воркер, который слушает обе очереди задач
+    print("🚀 Воркер успешно инициализирован. Регистрация деплойментов в Prefect 3.x...")
+    await aserve(full_monolith_deployment, gold_layer_deployment)
+
 if __name__ == "__main__":
-    import os
-    # Говорим скрипту смотреть на локальный сервер
+    # Настройка полного и корректного адреса локального API сервера Prefect
     os.environ["PREFECT_API_URL"] = "http://127.0.0"
     
-    # serve() регистрирует флоу и превращает скрипт в постоянного воркера
-    main_pipeline.serve(
-        name="medallion-cron-deployment",
-        cron="*/90 * * * *"  # Будет сам запускаться каждые 15 минут
-    )
+    # Запускаем асинхронную регистрацию деплойментов
+    asyncio.run(create_deployments())

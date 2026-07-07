@@ -5,7 +5,7 @@ httpx
 beautifulsoup4
 python-dotenv
 asyncpg
-gigachat
+gigachat>=0.2.1
 trafilatura
 sqlalchemy
 numpy

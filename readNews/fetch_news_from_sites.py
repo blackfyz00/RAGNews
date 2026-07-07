@@ -41,7 +41,7 @@ async def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                     continue
                 
                 entries_count = 0
-                for entry in feed.entries[:10]:
+                for entry in feed.entries[:5]:
                     title = entry.get("title", "").strip()
                     article_url = entry.get("link", "")
                     full_content = ""
