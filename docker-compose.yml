@@ -39,15 +39,24 @@ services:
       db:
         condition: service_healthy
 
-  # telegram_bot:
-  #   build: ./client_bot
-  #   container_name: tg_client_bot
-  #   restart: always
-  #   env_file:
-  #     - ./.env
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
+  telegram_bot:
+    build: ./client_bot
+    container_name: tg_client_bot
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=it_news_rag
+      - PREFECT_API_URL=http://news_pipeline:8210/api
+    depends_on:
+      db:
+        condition: service_healthy
+      news_pipeline:
+        condition: service_started
 
 volumes:
   postgres_data:
