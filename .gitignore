@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+/readNews/*.env
 .envrc
 .venv
 env/

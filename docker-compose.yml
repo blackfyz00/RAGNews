@@ -1,0 +1,53 @@
+name: ragnews
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: it_news_rag_db
+    environment:
+      POSTGRES_DB: it_news_rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Добавляем проверку готовности базы данных
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d it_news_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  news_pipeline:
+    build: ./readNews
+    container_name: read_news_app
+    ports:
+      - "8210:8210"
+    env_file:
+      - ./.env
+    environment:
+      - PREFECT_HOME=/app/.prefect
+      - PREFECT_API_DATABASE_CONNECTION_URL=${PREFECT_API_DATABASE_CONNECTION_URL}
+      - PREFECT_SERVER_EPHEMERAL_STARTUP_TIMEOUT_SECONDS=60
+      - PREFECT_API_URL=http://read_news_app:8210/api
+      - PREFECT_UI_API_URL=http://localhost:8210/api
+    volumes:
+      - ./readNews:/app/
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # telegram_bot:
+  #   build: ./client_bot
+  #   container_name: tg_client_bot
+  #   restart: always
+  #   env_file:
+  #     - ./.env
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
+volumes:
+  postgres_data:
