@@ -1,2 +1,1 @@
-http://lenta.ru/rss/news
-https://ria.ru/export/rss2/archive/index.xml
+https://habr.com/ru/rss/news/?fl=ru

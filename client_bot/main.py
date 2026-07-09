@@ -7,6 +7,8 @@ from datetime import date, datetime
 from typing import Any
 from urllib.parse import quote
 
+from define_id_flow import get_deployment_id_by_name
+
 import asyncpg
 import httpx
 from dotenv import load_dotenv
@@ -197,7 +199,6 @@ async def search_gold_news(query: str, limit: int) -> list[asyncpg.Record]:
                 id,
                 ai_title,
                 ai_text,
-                source_name,
                 url,
                 date,
                 links,
@@ -212,7 +213,6 @@ async def search_gold_news(query: str, limit: int) -> list[asyncpg.Record]:
         )
     finally:
         await conn.close()
-
 
 def format_source_links(row: asyncpg.Record) -> str:
     links = []
@@ -244,7 +244,6 @@ def build_context(rows: list[asyncpg.Record]) -> str:
                     f"Новость {index}",
                     f"Заголовок: {row['ai_title'] or 'Без заголовка'}",
                     f"Кратко: {row['ai_text'] or ''}",
-                    f"Источник: {row['source_name'] or 'не указан'}",
                     f"Дата: {normalize_date(row['date'])}",
                     f"Ссылки:\n{format_source_links(row)}",
                 ]
@@ -254,69 +253,94 @@ def build_context(rows: list[asyncpg.Record]) -> str:
 
 
 def generate_answer(user_text: str, query_phrase: str, rows: list[asyncpg.Record]) -> str:
-    context = build_context(rows)
-    prompt = f"""
-Запрос пользователя: {user_text}
-Точная поисковая фраза: {query_phrase}
-
-Найденные новости из gold слоя:
-{context}
-
-Составь короткий ответ на русском языке. Обязательно:
-- скажи, по какой фразе выполнен поиск;
-- перечисли найденные новости;
-- сохрани ссылки на источники;
-- не добавляй фактов, которых нет в контексте.
-"""
-    response = chat_client.chat(
-        {
-            "model": os.getenv("GIGACHAT_MODEL", "GigaChat"),
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Ты новостной RAG-ассистент. Отвечай только по переданному контексту "
-                        "и всегда сохраняй ссылки на источники."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-        }
-    )
-    return response.choices[0].message.content.strip()
-
+    """Формирует ответ в HTML формате для Telegram"""
+    parts = []
+    
+    # Заголовок
+    parts.append(f"<b>🔍 Результаты поиска по запросу:</b> <i>\"{query_phrase}\"</i>\n")
+    
+    for idx, row in enumerate(rows, start=1):
+        title = row['ai_title'] or 'Без заголовка'
+        text = row['ai_text'] or 'Описание отсутствует'
+        date_str = normalize_date(row['date'])
+        
+        parts.append(f"<b>{idx}. {title}</b>\n")
+        parts.append(f"{text}\n")
+        parts.append(f"<b>📅 Дата:</b> {date_str}\n")
+        
+        links = []
+        if row['url']:
+            links.append(str(row['url']))
+        if row['links']:
+            links.extend(str(link) for link in row['links'] if link)
+        unique_links = list(dict.fromkeys(links))
+        
+        if unique_links:
+            parts.append("<b>🔗 Ссылки:</b>")
+            for link in unique_links[:3]:
+                parts.append(f"• <a href=\"{link}\">{link}</a>")
+        else:
+            parts.append("<b>🔗 Ссылки:</b> отсутствуют")
+        
+        parts.append("")
+        parts.append("─" * 30)
+        parts.append("")
+    
+    # Убираем лишние разделители в конце
+    while parts and parts[-1] in ["", "─" * 30]:
+        parts.pop()
+    
+    parts.append(f"\n<b>📌 Всего найдено:</b> {len(rows)} новостей")
+    
+    return "\n".join(parts)
 
 async def trigger_prefect_update() -> str:
-    if settings.prefect_update_endpoint:
-        endpoint = settings.prefect_update_endpoint
-    elif settings.prefect_deployment_id:
-        endpoint = f"{settings.prefect_api_url}/deployments/{settings.prefect_deployment_id}/create_flow_run"
-    elif settings.prefect_deployment_name:
-        if "/" in settings.prefect_deployment_name:
-            flow_name, deployment_name = settings.prefect_deployment_name.split("/", 1)
-            endpoint = (
-                f"{settings.prefect_api_url}/deployments/name/"
-                f"{quote(flow_name, safe='')}/{quote(deployment_name, safe='')}/create_flow_run"
+    deployment_id = None
+    
+    # Проверяем, что имя деплоймента указано в .env
+    if not settings.prefect_deployment_name:
+        raise RuntimeError("PREFECT_DEPLOYMENT_NAME not set in .env")
+    
+    # Получаем ID деплоймента динамически по имени
+    deployment_id = await get_deployment_id_by_name(
+        settings.prefect_deployment_name,
+        settings.prefect_api_url
+    )
+    
+    # Проверяем, что ID получен
+    if not deployment_id:
+        raise RuntimeError(f"Deployment '{settings.prefect_deployment_name}' not found in Prefect")
+    
+    # Запускаем flow run
+    endpoint = f"{settings.prefect_api_url}/deployments/{deployment_id}/create_flow_run"
+    logger.info(f"Triggering flow at: {endpoint}")
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            response = await client.post(
+                endpoint,
+                json={
+                    "parameters": {},
+                    "name": f"manual_update_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                }
             )
-        else:
-            deployment_name = quote(settings.prefect_deployment_name, safe="")
-            endpoint = f"{settings.prefect_api_url}/deployments/name/{deployment_name}/create_flow_run"
-    else:
-        raise RuntimeError(
-            "Set PREFECT_UPDATE_ENDPOINT, PREFECT_DEPLOYMENT_ID, or PREFECT_DEPLOYMENT_NAME"
-        )
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(endpoint, json={})
-        response.raise_for_status()
-        payload = response.json() if response.content else {}
-
-    flow_run_id = payload.get("id") or payload.get("flow_run_id")
-    if flow_run_id:
-        return f"Запустил обновление новостей. Flow run: {flow_run_id}"
-    return "Запустил обновление новостей."
-
+            response.raise_for_status()
+            payload = response.json() if response.content else {}
+            
+            flow_run_id = payload.get("id") or payload.get("flow_run_id")
+            if flow_run_id:
+                return f"✅ Запустил обновление новостей. Flow run: {flow_run_id}"
+            return "✅ Запустил обновление новостей."
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            raise RuntimeError(f"Prefect API error: {e.response.status_code}")
+        except httpx.ConnectError:
+            logger.error("Cannot connect to Prefect API")
+            raise RuntimeError("Не могу подключиться к Prefect. Проверьте, запущен ли news_pipeline.")
+        except Exception as e:
+            logger.exception(f"Unexpected error: {e}")
+            raise
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(BOT_PURPOSE_TEXT)
@@ -326,10 +350,16 @@ async def update_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.chat.send_action(ChatAction.TYPING)
     try:
         message = await trigger_prefect_update()
-        await update.message.reply_text(message)
+        await update.message.reply_text(
+            message,
+            parse_mode="Markdown"  # ← Добавьте
+        )
     except Exception as exc:
         logger.exception("Failed to trigger Prefect update")
-        await update.message.reply_text(f"Не удалось запустить обновление: {exc}")
+        await update.message.reply_text(
+            f"❌ *Не удалось запустить обновление*\n\n`{exc}`",
+            parse_mode="Markdown"  # ← Добавьте
+        )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -343,7 +373,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     intent = classified["intent"]
 
     if intent == "offtopic":
-        await update.message.reply_text(classified.get("message") or BOT_PURPOSE_TEXT)
+        await update.message.reply_text(
+            classified.get("message") or BOT_PURPOSE_TEXT,
+            parse_mode="Markdown"  
+        )
         return
 
     if intent == "update":
@@ -355,12 +388,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         rows = await search_gold_news(query_phrase, settings.search_limit)
     except Exception:
         logger.exception("Failed to search gold layer")
-        await update.message.reply_text("Не смог подключиться к gold-слою или выполнить поиск.")
+        await update.message.reply_text(
+            "❌ *Не смог подключиться к gold-слою или выполнить поиск.*",
+            parse_mode="Markdown"  # ← Добавьте
+        )
         return
 
     if not rows:
         await update.message.reply_text(
-            f"По фразе \"{query_phrase}\" ничего не нашлось. Можно запустить обновление через /update."
+            f"🔍 *По фразе* `\"{query_phrase}\"` *ничего не нашлось.*\n\n🔄 Можно запустить обновление через /update.",
+            parse_mode="Markdown"  # ← Добавьте
         )
         return
 
@@ -370,7 +407,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.exception("Failed to generate final answer")
         answer = build_context(rows)
 
-    await update.message.reply_text(answer, disable_web_page_preview=True)
+    await update.message.reply_text(
+        answer,
+        parse_mode="HTML",  # ← Добавьте это!
+        disable_web_page_preview=True
+    )
 
 
 def main() -> None:

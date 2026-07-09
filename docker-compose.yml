@@ -12,8 +12,8 @@ services:
       - "5438:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    # Добавляем проверку готовности базы данных
+      - ./db/01init.sql:/docker-entrypoint-initdb.d/01init.sql
+      - ./db/02-seed-sources.sql:/docker-entrypoint-initdb.d/02-seed-sources.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d it_news_rag"]
       interval: 5s
@@ -42,7 +42,6 @@ services:
   telegram_bot:
     build: ./client_bot
     container_name: tg_client_bot
-    restart: always
     env_file:
       - ./.env
     environment:
@@ -52,6 +51,8 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=it_news_rag
       - PREFECT_API_URL=http://news_pipeline:8210/api
+    volumes:
+      - ./client_bot:/app
     depends_on:
       db:
         condition: service_healthy

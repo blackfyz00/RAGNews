@@ -34,3 +34,25 @@ CREATE TABLE IF NOT EXISTS gold (
     links TEXT ARRAY, -- список ссылок
     embeddings VECTOR(1024) -- те же эмбеддинги
 );
+
+CREATE TABLE IF NOT EXISTS sources (
+    id SERIAL PRIMARY KEY, -- ID источника
+
+    source_type TEXT NOT NULL CHECK (source_type IN ('site', 'tg')), -- тип источника: site / tg
+    url TEXT NOT NULL UNIQUE -- URL RSS-ленты или Telegram-канала
+);
+
+-- CREATE INDEX IF NOT EXISTS idx_sources_type
+-- ON sources(source_type);
+
+-- CREATE INDEX IF NOT EXISTS idx_bronze_source_id
+-- ON bronze(source_id);
+
+-- CREATE INDEX IF NOT EXISTS idx_silver_source_id
+-- ON silver(source_id);
+
+-- CREATE INDEX IF NOT EXISTS idx_gold_source_id
+-- ON gold(source_id);
+
+-- CREATE INDEX IF NOT EXISTS idx_silver_hash
+-- ON silver(hash);
