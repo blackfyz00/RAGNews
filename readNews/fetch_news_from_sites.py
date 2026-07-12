@@ -5,21 +5,36 @@ import httpx
 from dateutil import parser as date_parser
 from prefect import task, get_run_logger
 import trafilatura
+from sqlalchemy import text
 
-from read_lines_from_file import read_lines_from_file
+# Импортируем вашу фабрику сессий
+from database import get_async_session_factory 
 
 @task(retries=3, retry_delay_seconds=30, name="Парсинг сайтов (RSS)")
-async def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
-    """Скачивает свежие новости с сайтов, гарантированно обходя блокировки."""
+async def fetch_news_from_sites() -> list[dict]:
+    """Скачивает свежие новости с сайтов, беря URL RSS-лент из таблицы sources базы данных."""
     logger = get_run_logger()
-    urls = read_lines_from_file(file_path)
     all_news = []
     
-    if not urls:
-        logger.info(f"ℹ️ Нет URL для парсинга сайтов в файле {file_path}")
+    # 1. Получаем фабрику сессий и запрашиваем URL из БД
+    async_session_factory = get_async_session_factory()
+    
+    try:
+        async with async_session_factory() as session:
+            # Выбираем только сайты (site) из таблицы sources
+            query = text("SELECT url FROM sources WHERE source_type = 'site';")
+            result = await session.execute(query)
+            # Извлекаем список URL строк
+            urls = [row for row in result.fetchall()]
+    except Exception as e:
+        logger.error(f"❌ Ошибка при чтении URL сайтов из таблицы sources: {e}")
         return all_news
 
-    logger.info(f"🔍 Начинаю парсинг {len(urls)} сайтов...")
+    if not urls:
+        logger.info("ℹ️ В таблице sources не найдено URL с типом 'site' для парсинга.")
+        return all_news
+
+    logger.info(f"🔍 Начинаю парсинг {len(urls)} сайтов из базы данных...")
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -72,18 +87,22 @@ async def fetch_news_from_sites(file_path: str = "sites.txt") -> list[dict]:
                         raw_summary = entry.get("summary", entry.get("description", ""))
                         full_content = trafilatura.html2txt(raw_summary) if raw_summary else "Контент статьи не удалось извлечь."
                     
-                    timestamp = entry.get("published", datetime.now().isoformat())
+                    # ИСПРАВЛЕНО: Безопасное извлечение даты публикации из RSS (try/except перенесен выше)
                     try:
-                        dt = date_parser.parse(timestamp)
-                        timestamp = dt.strftime("%Y-%m-%d %H:%M")
+                        timestamp = entry.get("published", entry.get("updated", None))
+                        if timestamp:
+                            dt = date_parser.parse(timestamp)
+                            date_str = dt.strftime("%Y-%m-%d")
+                        else:
+                            date_str = datetime.now().strftime("%Y-%m-%d")
                     except Exception:
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        date_str = datetime.now().strftime("%Y-%m-%d")
                     
                     payload = {
                         "title": title,                  
                         "content": full_content,         
-                        "source": feed.feed.get("title", url),
-                        "timestamp": timestamp,
+                        "source_name": feed.feed.get("title", url), # ИСПРАВЛЕНО: Ключ source_name вместо source
+                        "date": date_str,
                         "url": article_url
                     }
                     all_news.append(payload)

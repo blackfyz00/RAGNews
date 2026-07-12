@@ -9,8 +9,8 @@ async def bronze_pipeline():
     print("="*50)
     
     # 1. Парсинг новостей с сайтов и Telegram
-    site_news = await fetch_news_from_sites(file_path="sites.txt")
-    tg_news = await fetch_news_from_telegram(file_path="tgch.txt")
+    site_news = await fetch_news_from_sites()
+    tg_news = await fetch_news_from_telegram()
     
     # Объединяем массивы payload в один общий бронзовый пул
     raw_bronze_pool = site_news + tg_news

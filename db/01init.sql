@@ -42,17 +42,5 @@ CREATE TABLE IF NOT EXISTS sources (
     url TEXT NOT NULL UNIQUE -- URL RSS-ленты или Telegram-канала
 );
 
--- CREATE INDEX IF NOT EXISTS idx_sources_type
--- ON sources(source_type);
-
--- CREATE INDEX IF NOT EXISTS idx_bronze_source_id
--- ON bronze(source_id);
-
--- CREATE INDEX IF NOT EXISTS idx_silver_source_id
--- ON silver(source_id);
-
--- CREATE INDEX IF NOT EXISTS idx_gold_source_id
--- ON gold(source_id);
-
--- CREATE INDEX IF NOT EXISTS idx_silver_hash
--- ON silver(hash);
+CREATE INDEX IF NOT EXISTS idx_gold_embeddings_hnsw 
+ON gold USING hnsw (embeddings vector_cosine_ops);
