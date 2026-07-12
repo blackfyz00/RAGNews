@@ -283,11 +283,11 @@ def generate_answer(user_text: str, query_phrase: str, rows: list[asyncpg.Record
             parts.append("<b>🔗 Ссылки:</b> отсутствуют")
         
         parts.append("")
-        parts.append("─" * 30)
+        parts.append("─" * 15)
         parts.append("")
     
     # Убираем лишние разделители в конце
-    while parts and parts[-1] in ["", "─" * 30]:
+    while parts and parts[-1] in ["", "─" * 15]:
         parts.pop()
     
     parts.append(f"\n<b>📌 Всего найдено:</b> {len(rows)} новостей")
