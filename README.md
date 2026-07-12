@@ -1,39 +1,111 @@
-# RAGNews Telegram bot
+# RAGNews
 
-Telegram bot for searching news from the PostgreSQL/pgvector `gold` layer with GigaChat.
+**RAGNews** — это система агрегации и поиска новостей на базе **Medallion Architecture** (медальонной архитектуры) с использованием PostgreSQL + pgvector и GigaChat. Проект собирает новости, очищает и обогащает их, генерирует AI-пересказы и позволяет искать их через удобного Telegram-бота.
 
-## Environment
+## Архитектура проекта (Medallion Architecture)
 
-Required:
+Проект следует классической **медальонной (многослойной) архитектуре**:
 
-- `TELEGRAM_BOT_TOKEN`
-- `GIGACHAT_AUTH_KEY` or `GIGACHAT_CREDENTIALS`
-- `GIGACHAT_SCOPE`
+* **Bronze Layer** (Бронзовый слой — сырые данные)
+  - Сбор новостей с новостных сайтов (парсинг) и Telegram-каналов.
+  - Данные сохраняются в сыром виде в таблицу `bronze`.
 
-Database defaults match the project docker setup exposed to host:
+* **Silver Layer** (Серебряный слой — очищенные и обогащенные данные)
+  - Дедупликация новостей.
+  - Генерация эмбеддингов (через GigaChat Embeddings).
+  - Очистка и нормализация `title` и `content`.
+  - Данные сохраняются в таблицу `silver`.
 
-- `DB_HOST=localhost`
-- `DB_PORT=5438`
-- `DB_NAME=it_news_rag`
-- `DB_USER=postgres`
-- `DB_PASSWORD=postgres`
+* **Gold Layer** (Золотой слой — готовые к использованию данные)
+  - Нейросеть (GigaChat) формирует **качественные AI-заголовки** (`ai_title`) и **краткие пересказы** (`ai_text`).
+  - Генерируются векторные эмбеддинги для семантического поиска.
+  - Именно этот слой используется для поиска в Telegram-боте.
 
-For the news update command, set one of:
+## Структура проекта
 
-- `PREFECT_UPDATE_ENDPOINT`
-- `PREFECT_DEPLOYMENT_ID`
-- `PREFECT_DEPLOYMENT_NAME`, for example `flow-name/deployment-name`
+```
+RAGNews/
+├── db/                     # Инициализация PostgreSQL + схемы таблиц
+├── readNews/               # Основной новостной пайплайн (Prefect)
+│   ├── bronze_pipeline.py
+│   ├── silver/
+│   ├── gold_layer/
+│   ├── readNews.py         # Главный flow + деплойменты
+│   └── ...
+├── client_bot/             # Telegram-бот
+│   ├── main.py
+│   ├── define_id_flow.py
+│   └── ...
+├── docker-compose.yml
+└── .env.example
+```
 
-Optional:
-
-- `PREFECT_API_URL`, default `http://localhost:8210/api`
-- `NEWS_SEARCH_LIMIT`, default `5`
-- `GIGACHAT_MODEL`, default `GigaChat`
-- `GIGACHAT_EMBEDDING_MODEL`, default `Embeddings`
-
-## Run
+## Запуск проекта одной командой
 
 ```bash
-pip install -r requirements.txt
-python main.py
+docker compose up -d
 ```
+
+**Что запускается:**
+- `db` — PostgreSQL 16 + pgvector (порт 5438)
+- `news_pipeline` — Prefect-сервер + все пайплайны (Bronze → Silver → Gold)
+- `telegram_bot` — Telegram-бот
+
+Бот автоматически подключается к БД и Prefect API.
+
+## Telegram-бот
+
+**Контейнер:** `tg_client_bot`
+
+Бот умеет:
+- Искать новости по запросу (семантический поиск по Gold-слою с помощью векторного сходства).
+- Запускать обновление базы командой `/update` или словами вроде «обнови», «запустить парсинг».
+- Использует GigaChat API для:
+  - Классификации запроса пользователя.
+  - Генерации эмбеддингов запроса.
+- Возвращает результаты в красивом HTML-формате с ссылками и датами.
+
+### Основная логика бота (`handle_message`):
+1. Классификация intent (`search` / `update` / `offtopic`) через GigaChat.
+2. При поиске — генерация эмбеддинга → векторный поиск в таблице `gold`.
+3. Формирование ответа с AI-заголовками и пересказами.
+
+## Prefect (оркестрация)
+
+- Полный конвейер (`medallion-cron-deployment`) — каждые 90 минут.
+- Отдельный быстрый Gold-слой (`gold-layer-fast-cron`) — чаще.
+- Запуск вручную из бота через Prefect API.
+
+## Настройка (.env)
+
+Обязательные переменные:
+
+```env
+TELEGRAM_BOT_TOKEN=...
+GIGACHAT_CREDENTIALS=...  
+GIGACHAT_SCOPE=...
+
+# Для Prefect
+PREFECT_DEPLOYMENT_NAME=medallion-cron-deployment
+```
+
+Подробный список переменных смотрите в `docker-compose.yml`.
+
+## Разработка
+
+### Docker
+
+Каждый сервис имеет свой `Dockerfile`.
+
+## Технологии
+
+- **Python** + **Asyncio**
+- **Prefect 3** — оркестрация
+- **PostgreSQL + pgvector** — хранение и векторный поиск
+- **GigaChat** — эмбеддинги, LLM, классификация
+- **Telegram Bot API** (python-telegram-bot)
+- **Docker Compose**
+
+---
+
+**Проект готов к использованию "из коробки"** — просто склонируйте репозиторий, настройте `.env` и выполните `docker compose up -d`.
