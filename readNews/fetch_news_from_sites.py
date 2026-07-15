@@ -25,7 +25,7 @@ async def fetch_news_from_sites() -> list[dict]:
             query = text("SELECT url FROM sources WHERE source_type = 'site';")
             result = await session.execute(query)
             # Извлекаем список URL строк
-            urls = [row for row in result.fetchall()]
+            urls = [row[0] for row in result.fetchall()] 
     except Exception as e:
         logger.error(f"❌ Ошибка при чтении URL сайтов из таблицы sources: {e}")
         return all_news
@@ -56,7 +56,7 @@ async def fetch_news_from_sites() -> list[dict]:
                     continue
                 
                 entries_count = 0
-                for entry in feed.entries[:5]:
+                for entry in feed.entries[:10]:
                     title = entry.get("title", "").strip()
                     article_url = entry.get("link", "")
                     full_content = ""
