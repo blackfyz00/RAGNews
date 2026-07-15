@@ -23,14 +23,12 @@ async def save_silver_to_db(silver_news: list[dict]):
                 for item in silver_news:
                     embeddings_list = item.get("embeddings", [])
                     
-                    # Конвертируем список float в текстовую строку '[0.1, 0.2, ...]'
+                    
                     if embeddings_list and isinstance(embeddings_list, list):
                         embeddings_str = '[' + ', '.join(str(x) for x in embeddings_list) + ']'
                     else:
                         embeddings_str = None
 
-                    # ИСПРАВЛЕНО: Убран каст :embeddings::vector, заменен на стандартную функцию CAST(:embeddings AS vector)
-                    # Это исключает синтаксический конфликт двоеточий в компиляторе SQLAlchemy
                     query = text("""
                         INSERT INTO silver (
                             id,
@@ -72,7 +70,7 @@ async def save_silver_to_db(silver_news: list[dict]):
                             "normalized_content": item.get("normalized_content"),
                             "links": item.get("links", []),
                             "hash": item.get("hash", ""),
-                            "embeddings": embeddings_str  # Передается как строка '[1.0078, ...]'
+                            "embeddings": embeddings_str  
                         }
                     )
 
