@@ -1,55 +1,88 @@
 import os
+import asyncio
+import logging
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from gigachat import GigaChat
+from gigachat.exceptions import RateLimitError, GigaChatException
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+
 class GigaChatEmbeddingProvider:
     def __init__(self):
-        # В докере переменные уже в системе, os.getenv сработает отлично
         self.client = GigaChat(
             credentials=os.getenv("GIGACHAT_CREDENTIALS"),
             scope=os.getenv("GIGACHAT_SCOPE"),
             verify_ssl_certs=False,
+            timeout=60,                    # важно
         )
 
-    def prepare_embedding_text(self, news: Dict[str, Any], max_chars: int = 1500) -> str:
+    def prepare_embedding_text(self, news: Dict[str, Any], max_chars: int = 1000) -> str:
         title = news.get("title", "") or ""
-        
-        # ИСПРАВЛЕНО: Защита на случай, если очищенный текст лежит в другом ключе
-        body = news.get("normalized_text") or news.get("text") or news.get("content") or ""
-
+        body = (
+            news.get("normalized_text")
+            or news.get("text")
+            or news.get("content")
+            or ""
+        )
         text = f"TITLE: {title}\nCONTENT: {body}".strip()
 
         if len(text) > max_chars:
-            # Безопасное усечение по пробелу, чтобы не ломать слово на полуслове
             try:
                 text = text[:max_chars].rsplit(" ", 1)[0]
             except Exception:
                 text = text[:max_chars]
-
         return text
 
     def get_embedding(self, text: str) -> List[float]:
-        # Отправляем в API уже гарантированно короткий текст
-        response = self.client.embeddings(
-            texts=[text]
-        )
-        return response.data[0].embedding
+        """Получение эмбеддинга с обработкой Rate Limit"""
+        for attempt in range(7):  # до 6 повторных попыток
+            try:
+                response = self.client.embeddings(texts=[text])
+                return response.data[0].embedding
+
+            except RateLimitError:
+                wait_seconds = (2 ** attempt) * 7  # 7, 14, 28, 56...
+                logger.warning(
+                    f"RateLimitError при получении эмбеддинга. "
+                    f"Попытка {attempt + 1}/7. Ждём {wait_seconds} сек."
+                )
+                asyncio.sleep(wait_seconds)
+                continue
+
+            except GigaChatException as e:
+                logger.error(f"GigaChat error: {e}")
+                if attempt == 6:
+                    raise
+                asyncio.sleep(5)
+
+            except Exception as e:
+                logger.exception(f"Неожиданная ошибка при эмбеддинге: {e}")
+                if attempt == 6:
+                    raise
+                asyncio.sleep(3)
+
+        raise RuntimeError("Не удалось получить embedding после всех попыток")
 
     def add_embeddings(self, news_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         total = len(news_list)
-
         for i, news in enumerate(news_list, start=1):
             print(f"Embedding {i}/{total}")
-
-            text = self.prepare_embedding_text(news)
             
-            if not text:
+            text = self.prepare_embedding_text(news)
+            if not text.strip():
                 text = "Пустая новость"
 
             embedding = self.get_embedding(text)
             news["embedding"] = embedding
+
+            # Важная пауза между запросами
+            if i % 4 == 0:
+                asyncio.sleep(1.8)
+            else:
+                asyncio.sleep(0.7)   # базовая задержка
 
         return news_list

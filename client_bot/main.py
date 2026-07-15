@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 from urllib.parse import quote
+from datetime import timezone, timedelta
 
 from define_id_flow import get_deployment_id_by_name
 
@@ -50,7 +51,47 @@ SYSTEM_PROMPT = """
    {"intent":"search|update|offtopic","query":"точная фраза или пустая строка","message":"короткое сообщение"}
 """
 
-
+async def get_last_flow_run_time(deployment_id: str) -> datetime | None:
+    """Возвращает время последнего УСПЕШНОГО запуска (в naive UTC)"""
+    url = f"{settings.prefect_api_url}/flow_runs/filter"
+    
+    filter_payload = {
+        "sort": "START_TIME_DESC",
+        "limit": 1,
+        "flow_runs": {
+            "deployment_id": {"any_": [deployment_id]},
+            # ИСПРАВЛЕНО: Фильтруем только успешно завершенные потоки
+            "state": {
+                "type": {"any_": ["COMPLETED"]}
+            }
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            resp = await client.post(url, json=filter_payload)
+            resp.raise_for_status()
+            runs = resp.json()
+            
+            if not runs:
+                logger.info("ℹ️ Нет предыдущих успешных запусков")
+                return None
+                
+            # ИСПРАВЛЕНО: У завершенного flow run всегда есть 'start_time'
+            last_start_str = runs[0].get("start_time")
+            if not last_start_str:
+                return None
+            
+            dt = datetime.fromisoformat(last_start_str.replace("Z", "+00:00"))
+            last_run_utc = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            
+            logger.info(f"📋 Prefect last COMPLETED run: {last_run_utc} UTC")
+            return last_run_utc
+            
+        except Exception as e:
+            logger.warning(f"Не удалось получить последний flow run: {e}")
+            return None
+        
 @dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str
@@ -186,11 +227,11 @@ def get_embedding(text: str) -> list[float]:
 def vector_literal(values: list[float]) -> str:
     return "[" + ",".join(str(float(value)) for value in values) + "]"
 
-
-async def search_gold_news(query: str, limit: int) -> list[asyncpg.Record]:
+async def search_gold_news(query: str, limit: int, similarity_threshold: float = 0.65) -> list[asyncpg.Record]:
+    """Поиск с отсечением по минимальной релевантности"""
     embedding = await asyncio.to_thread(get_embedding, query)
     query_vector = vector_literal(embedding)
-
+    
     conn = await asyncpg.connect(**settings.db_config)
     try:
         return await conn.fetch(
@@ -205,11 +246,13 @@ async def search_gold_news(query: str, limit: int) -> list[asyncpg.Record]:
                 1 - (embeddings <=> $1::vector) AS similarity
             FROM gold
             WHERE embeddings IS NOT NULL
+              AND 1 - (embeddings <=> $1::vector) >= $3     -- порог
             ORDER BY embeddings <=> $1::vector
             LIMIT $2;
             """,
             query_vector,
             limit,
+            similarity_threshold,
         )
     finally:
         await conn.close()
@@ -345,22 +388,53 @@ async def trigger_prefect_update() -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(BOT_PURPOSE_TEXT)
 
-
 async def update_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.chat.send_action(ChatAction.TYPING)
+    
     try:
-        message = await trigger_prefect_update()
-        await update.message.reply_text(
-            message,
-            parse_mode="Markdown"  # ← Добавьте
-        )
-    except Exception as exc:
-        logger.exception("Failed to trigger Prefect update")
-        await update.message.reply_text(
-            f"❌ *Не удалось запустить обновление*\n\n`{exc}`",
-            parse_mode="Markdown"  # ← Добавьте
-        )
+        if not settings.prefect_deployment_name:
+            raise RuntimeError("PREFECT_DEPLOYMENT_NAME not set")
 
+        deployment_id = await get_deployment_id_by_name(
+            settings.prefect_deployment_name, settings.prefect_api_url
+        )
+        
+        if not deployment_id:
+            raise RuntimeError(f"Deployment '{settings.prefect_deployment_name}' not found")
+
+        last_run_time = await get_last_flow_run_time(deployment_id)
+
+        if last_run_time:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            delta = now - last_run_time
+
+            if delta < timedelta(seconds=0):
+                delta = timedelta(seconds=0)
+
+            minutes_ago = int(delta.total_seconds() // 60)
+
+            if delta < timedelta(minutes=5):
+                await update.message.reply_text(
+                    f"✅ **Данные уже актуальны**\n\n"
+                    f"Обновление было **{minutes_ago}** минут назад "
+                    f"({last_run_time.strftime('%H:%M:%S')} UTC).\n"
+                    f"Подождите немного перед следующим обновлением.",
+                    parse_mode="Markdown"
+                )
+                return
+
+        # === Запускаем обновление ===
+        await update.message.reply_text("🚀 Запускаю обновление новостей...", parse_mode="Markdown")
+        
+        message = await trigger_prefect_update()
+        await update.message.reply_text(message, parse_mode="Markdown")
+        
+    except Exception as exc:
+        logger.exception("Failed to handle /update")
+        await update.message.reply_text(
+            f"❌ **Ошибка при обновлении**\n\n`{type(exc).__name__}: {exc}`",
+            parse_mode="Markdown"
+        )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = (update.message.text or "").strip()
@@ -385,7 +459,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     query_phrase = classified["query"]
     try:
-        rows = await search_gold_news(query_phrase, settings.search_limit)
+        rows = await search_gold_news(
+            query_phrase, 
+            settings.search_limit,
+            similarity_threshold=0.4
+        )
     except Exception:
         logger.exception("Failed to search gold layer")
         await update.message.reply_text(

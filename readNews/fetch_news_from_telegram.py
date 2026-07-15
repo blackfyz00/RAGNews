@@ -66,7 +66,7 @@ async def fetch_news_from_telegram() -> list[dict]:
                         messages = soup.find_all('div', {'data-post': True})
                     
                     posts_count = 0
-                    for message in messages[:10]:
+                    for message in messages[:15]:
                         try:
                             text_div = message.find('div', class_='tgme_widget_message_text')
                             if not text_div:
