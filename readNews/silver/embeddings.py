@@ -17,7 +17,7 @@ class GigaChatEmbeddingProvider:
             credentials=os.getenv("GIGACHAT_CREDENTIALS"),
             scope=os.getenv("GIGACHAT_SCOPE"),
             verify_ssl_certs=False,
-            timeout=60,                    # важно
+            timeout=60,                    
         )
 
     def prepare_embedding_text(self, news: Dict[str, Any], max_chars: int = 1000) -> str:
@@ -39,13 +39,13 @@ class GigaChatEmbeddingProvider:
 
     def get_embedding(self, text: str) -> List[float]:
         """Получение эмбеддинга с обработкой Rate Limit"""
-        for attempt in range(7):  # до 6 повторных попыток
+        for attempt in range(7):  
             try:
                 response = self.client.embeddings(texts=[text])
                 return response.data[0].embedding
 
             except RateLimitError:
-                wait_seconds = (2 ** attempt) * 7  # 7, 14, 28, 56...
+                wait_seconds = (2 ** attempt) * 7  
                 logger.warning(
                     f"RateLimitError при получении эмбеддинга. "
                     f"Попытка {attempt + 1}/7. Ждём {wait_seconds} сек."
@@ -79,10 +79,10 @@ class GigaChatEmbeddingProvider:
             embedding = self.get_embedding(text)
             news["embedding"] = embedding
 
-            # Важная пауза между запросами
+            
             if i % 4 == 0:
                 asyncio.sleep(1.8)
             else:
-                asyncio.sleep(0.7)   # базовая задержка
+                asyncio.sleep(0.7)   
 
         return news_list

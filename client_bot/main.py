@@ -60,7 +60,7 @@ async def get_last_flow_run_time(deployment_id: str) -> datetime | None:
         "limit": 1,
         "flow_runs": {
             "deployment_id": {"any_": [deployment_id]},
-            # ИСПРАВЛЕНО: Фильтруем только успешно завершенные потоки
+            
             "state": {
                 "type": {"any_": ["COMPLETED"]}
             }
@@ -77,7 +77,7 @@ async def get_last_flow_run_time(deployment_id: str) -> datetime | None:
                 logger.info("ℹ️ Нет предыдущих успешных запусков")
                 return None
                 
-            # ИСПРАВЛЕНО: У завершенного flow run всегда есть 'start_time'
+            
             last_start_str = runs[0].get("start_time")
             if not last_start_str:
                 return None
@@ -299,7 +299,7 @@ def generate_answer(user_text: str, query_phrase: str, rows: list[asyncpg.Record
     """Формирует ответ в HTML формате для Telegram"""
     parts = []
     
-    # Заголовок
+    
     parts.append(f"<b>🔍 Результаты поиска по запросу:</b> <i>\"{query_phrase}\"</i>\n")
     
     for idx, row in enumerate(rows, start=1):
@@ -329,7 +329,7 @@ def generate_answer(user_text: str, query_phrase: str, rows: list[asyncpg.Record
         parts.append("─" * 15)
         parts.append("")
     
-    # Убираем лишние разделители в конце
+    
     while parts and parts[-1] in ["", "─" * 15]:
         parts.pop()
     
@@ -340,21 +340,21 @@ def generate_answer(user_text: str, query_phrase: str, rows: list[asyncpg.Record
 async def trigger_prefect_update() -> str:
     deployment_id = None
     
-    # Проверяем, что имя деплоймента указано в .env
+    
     if not settings.prefect_deployment_name:
         raise RuntimeError("PREFECT_DEPLOYMENT_NAME not set in .env")
     
-    # Получаем ID деплоймента динамически по имени
+    
     deployment_id = await get_deployment_id_by_name(
         settings.prefect_deployment_name,
         settings.prefect_api_url
     )
     
-    # Проверяем, что ID получен
+    
     if not deployment_id:
         raise RuntimeError(f"Deployment '{settings.prefect_deployment_name}' not found in Prefect")
     
-    # Запускаем flow run
+    
     endpoint = f"{settings.prefect_api_url}/deployments/{deployment_id}/create_flow_run"
     logger.info(f"Triggering flow at: {endpoint}")
     
@@ -423,7 +423,7 @@ async def update_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 )
                 return
 
-        # === Запускаем обновление ===
+        
         await update.message.reply_text("🚀 Запускаю обновление новостей...", parse_mode="Markdown")
         
         message = await trigger_prefect_update()
@@ -468,14 +468,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.exception("Failed to search gold layer")
         await update.message.reply_text(
             "❌ *Не смог подключиться к gold-слою или выполнить поиск.*",
-            parse_mode="Markdown"  # ← Добавьте
+            parse_mode="Markdown"  
         )
         return
 
     if not rows:
         await update.message.reply_text(
             f"🔍 *По фразе* `\"{query_phrase}\"` *ничего не нашлось.*\n\n🔄 Можно запустить обновление через /update.",
-            parse_mode="Markdown"  # ← Добавьте
+            parse_mode="Markdown"  
         )
         return
 
@@ -487,7 +487,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await update.message.reply_text(
         answer,
-        parse_mode="HTML",  # ← Добавьте это!
+        parse_mode="HTML",  
         disable_web_page_preview=True
     )
 

@@ -7,7 +7,7 @@ from prefect import task, get_run_logger
 import trafilatura
 from sqlalchemy import text
 
-# Импортируем вашу фабрику сессий
+
 from database import get_async_session_factory 
 
 @task(retries=3, retry_delay_seconds=30, name="Парсинг сайтов (RSS)")
@@ -16,15 +16,15 @@ async def fetch_news_from_sites() -> list[dict]:
     logger = get_run_logger()
     all_news = []
     
-    # 1. Получаем фабрику сессий и запрашиваем URL из БД
+    
     async_session_factory = get_async_session_factory()
     
     try:
         async with async_session_factory() as session:
-            # Выбираем только сайты (site) из таблицы sources
+            
             query = text("SELECT url FROM sources WHERE source_type = 'site';")
             result = await session.execute(query)
-            # Извлекаем список URL строк
+            
             urls = [row[0] for row in result.fetchall()] 
     except Exception as e:
         logger.error(f"❌ Ошибка при чтении URL сайтов из таблицы sources: {e}")
@@ -87,7 +87,7 @@ async def fetch_news_from_sites() -> list[dict]:
                         raw_summary = entry.get("summary", entry.get("description", ""))
                         full_content = trafilatura.html2txt(raw_summary) if raw_summary else "Контент статьи не удалось извлечь."
                     
-                    # ИСПРАВЛЕНО: Безопасное извлечение даты публикации из RSS (try/except перенесен выше)
+                    
                     try:
                         timestamp = entry.get("published", entry.get("updated", None))
                         if timestamp:
@@ -101,7 +101,7 @@ async def fetch_news_from_sites() -> list[dict]:
                     payload = {
                         "title": title,                  
                         "content": full_content,         
-                        "source_name": feed.feed.get("title", url), # ИСПРАВЛЕНО: Ключ source_name вместо source
+                        "source_name": feed.feed.get("title", url), 
                         "date": date_str,
                         "url": article_url
                     }

@@ -23,13 +23,13 @@ async def save_to_bronze_layer_db(data: list[dict]) -> list[dict]:
     saved_news = []
     logger.info(f"💾 Начинаю импорт {len(data)} новостей в PostgreSQL через SQLAlchemy...")
     
-    # ИСПРАВЛЕНО: Создаем фабрику сессий динамически внутри таски
+    
     async_session_factory = get_async_session_factory()
     
-    # 1. Открываем сессию из асинхронного пула Алхимии
+    
     async with async_session_factory() as session:
         try:
-            # 2. Открываем транзакцию
+            
             async with session.begin():
                 for item in data:
                     url = item.get("url", "")
@@ -86,7 +86,7 @@ async def save_to_bronze_layer_db(data: list[dict]) -> list[dict]:
             logger.error(f"❌ Ошибка при работе с базой данных: {e}")
             raise e
             
-    # Принудительно закрываем движок сессии, освобождая ресурсы подпроцесса
+    
     await async_session_factory.kw['bind'].dispose()
     
     return saved_news
